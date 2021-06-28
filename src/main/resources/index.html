@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+</head>
+<body>
+<div>
+    <div id='chart'>
+        <svg></svg>
+    </div>
+</div>
+</body>
+
+<style>
+
+    /* Make the chart container fill the page using CSS. */
+    #chart {
+        position: fixed;
+        width: 100vw;
+        height: 80vh;
+    }
+
+    g {
+        width: inherit;
+        height: inherit;
+    }
+
+    path.link {
+        fill: none;
+        stroke: #2194e3;
+        stroke-width: 3px;
+    }
+
+    text {
+        font-family: sans-serif;
+        font-size: 12px;
+        fill: #999;
+    }
+
+</style>
+
+<script>
+    const chartDiv = document.getElementById('chart');
+    const width = chartDiv.clientWidth;
+    const height = chartDiv.clientHeight;
+    const radius = height / 2;
+    const tree = d3.tree().size([2 * Math.PI, radius - 75]);
+
+
+    const svg = d3.select('svg')
+        .style('width', width)
+        .style('height', height)
+        .style('padding', '10px')
+        .style('box-sizing', 'border-box')
+        .style('font', 'sans-serif');
+
+    const g = svg.append('g')
+        .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')');
+
+    const gLink = g.append('g')
+        .attr('class', 'links')
+        .attr('fill', 'none')
+        .attr('stroke', '#555')
+        .attr('stroke-opacity', '0.4')
+        .attr('stroke-width', 1.5);
+
+    const gNode = g.append('g')
+        .attr('class', 'nodes')
+        .attr('stroke-linejoin', 'round')
+        .attr('stroke-width', 3);
+
+    function update(hierarchy, terminate) {
+        const transitions = {
+            exit: d3.transition()
+                .duration(750),
+            update: d3.transition()
+                .delay(750)
+                .duration(750),
+            enter: d3.transition()
+                .delay(1500)
+                .duration(750)
+        }
+
+        function linkId(d) {
+            return d.source.data.name + '-' + d.target.data.name;
+        }
+
+        function nodeId(d) {
+            return d.data.entityType + '-' + d.data.name;
+        }
+
+        function circleColor(d) {
+            switch (d.data.entityType) {
+                case "entity":
+                    return '#046E97';
+                case "shard":
+                    return '#00C000';
+                case "node":
+                    return '#F17D00';
+                case "cluster":
+                    return '#B30000';
+                case "singleton":
+                    return '#bc5cd7';
+                default:
+                    return 'red';
+            }
+        }
+
+        function circleRadius(d) {
+            switch (d.data.entityType) {
+                case "entity":
+                    return 8;
+                case "shard":
+                    return 12;
+                case "singleton" :
+                case "node":
+                    return 22;
+                case "cluster":
+                    return 10;
+                default:
+                    return 3;
+            }
+        }
+
+        function circleRadiusExit(d) {
+            return 4 * circleRadius(d);
+        }
+
+        function offset(d, distance) {
+            return d.x < Math.PI === !d.children ? distance : -distance;
+        }
+
+        function labelOffsetX(d) {
+            switch (d.data.entityType) {
+                case "entity":
+                    return offset(d, 10);
+                case "shard":
+                    return offset(d, 14);
+                case "singleton":
+                case "node":
+                    return offset(d, 24);
+                case "cluster":
+                    return offset(d, 12);
+                default:
+                    return offset(d, 5);
+            }
+        }
+
+        function nodeCursor(d) {
+            return d.data.entityType.indexOf('node') >= 0 ? 'pointer' : 'default';
+        }
+
+        function clickCircle(d) {
+            const {entityType, name} = d.data
+            if (entityType === "node" || entityType === "singleton") {
+                terminate(name)
+            }
+        }
+
+        function configureLink(root, transitions) {
+            const {enter, exit, update} = transitions
+            const link = gLink.selectAll('path')
+                .data(root.links(), linkId);
+
+            const linkEnter = link.enter().append('path')
+                .attr('id', linkId)
+                .attr('class', d => 'link ' + d.source.data.entityType)
+                .style('opacity', 0.000001)
+                .attr('d', d3.linkRadial()
+                    .angle(d => d.x)
+                    .radius(d => d.y));
+
+            link.transition(update)
+                .style('opacity', 1.0)
+                .attr('d', d3.linkRadial()
+                    .angle(d => d.x)
+                    .radius(d => d.y));
+
+            linkEnter.transition(enter)
+                .style('opacity', 1.0);
+
+            link.exit()
+                .transition(exit)
+                .style('opacity', 0.000001)
+                .remove();
+        }
+
+        function configureNode(root, transitions) {
+            const {enter, exit, update} = transitions
+
+            const node = gNode.selectAll('g')
+                .data(root.descendants(), nodeId);
+
+            const nodeEnter = node.enter().append('g')
+                .attr('id', nodeId)
+                .attr('class', d => 'node ' + d.data.entityType)
+                .attr('transform', d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+                .on('mouseover', function () {
+                    d3.select(this).select('text').style('font-size', 24).style('fill', '#046E97');
+                })
+                .on('mouseout', function () {
+                    d3.select(this).select('text').style('font-size', 12).style('fill', '#999');
+                });
+
+            nodeEnter.append('circle')
+                .attr('class', d => d.data.entityType)
+                .attr('fill', circleColor)
+                .attr('r', circleRadius)
+                .attr('cursor', nodeCursor)
+                .on('click', (e) => clickCircle(e.target.__data__))
+                .style('opacity', 0.000001);
+
+            nodeEnter.append('text')
+                .attr('dy', '0.31em')
+                .attr('x', labelOffsetX)
+                .attr('text-anchor', d => d.x < Math.PI === !d.children ? 'start' : 'end')
+                .attr('transform', d => d.x >= Math.PI ? 'rotate(180)' : null)
+                .style('opacity', 0.000001)
+                .text(d => d.data.name);
+
+            nodeEnter.append('title')
+                .text(d => d.data.entityType);
+
+            node.transition(update)
+                .attr('transform', d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+                .select('circle.entity')
+                .attr('r', circleRadius)
+                .style('fill', '#42aaff')
+                .style('opacity', 1.0);
+
+            node.transition(update)
+                .select('text')
+                .style('opacity', 1.0);
+
+            nodeEnter.transition(enter)
+                .select('circle')
+                .style('opacity', 1.0);
+
+            nodeEnter.transition(enter)
+                .select('text')
+                .style('opacity', 1.0);
+
+            node.exit()
+                .transition(exit)
+                .select('circle')
+                .attr('r', circleRadiusExit)
+                .style('opacity', 0.000001)
+                .style('fill', 'red');
+
+            node.exit()
+                .transition(exit)
+                .select('text')
+                .style('opacity', 0.000001);
+
+            node.exit()
+                .transition(exit)
+                .remove();
+        }
+
+        const root = tree(d3.hierarchy(hierarchy));
+
+        configureLink(root, transitions);
+        configureNode(root, transitions);
+    }
+
+    function updateCluster(clusterEvent, terminate) {
+        const hierarchy = JSON.parse(clusterEvent)
+        update(hierarchy, terminate)
+    }
+
+    function connect(path) {
+        return new Promise((res, rej) => {
+            const clusterEvents = new EventSource(path)
+            clusterEvents.onopen = () => {
+                res(clusterEvents)
+            }
+            clusterEvents.onerror = (err) => {
+                rej(err)
+            }
+        })
+    }
+
+    function terminate(name) {
+        fetch(`/terminate/${name}`, {method: "DELETE"})
+            .catch(console.error)
+    }
+
+    function getClusterEventsWithRetry() {
+        return connect("/cluster")
+            .then((clusterEvents) => {
+                return new Promise(((resolve, reject) => {
+                    clusterEvents.onmessage = (ev) => {
+                        if (!document.hidden) {
+                            updateCluster(ev.data, terminate)
+                        }
+                    }
+
+                    clusterEvents.onclose = () => {
+                        reject("close")
+                    }
+
+                    clusterEvents.onerror = () => {
+                        reject("error")
+                    }
+                }))
+            })
+            .catch((err) => {
+                console.error(err)
+                console.log("retrying")
+                return getClusterEventsWithRetry()
+            })
+    }
+
+    window.addEventListener("load", () => {
+        getClusterEventsWithRetry()
+    })
+</script>
+</html>
