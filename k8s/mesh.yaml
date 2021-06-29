@@ -1,24 +1,33 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: wallet
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: pod-reader
+  namespace: wallet
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: pod-reader
+  namespace: wallet
 rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "watch", "list"]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "watch", "list" ]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: read-pods
+  namespace: wallet
 subjects:
   - kind: User
-    name: system:serviceaccount:default:pod-reader
+    name: system:serviceaccount:wallet:pod-reader
+    namespace: wallet
 roleRef:
   kind: Role
   name: pod-reader
@@ -28,6 +37,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: wallet
+  namespace: wallet
   labels:
     app: wallet
 spec:
@@ -71,7 +81,6 @@ spec:
             periodSeconds: 10
             failureThreshold: 10
             initialDelaySeconds: 20
-
 #          resources:
 #            limits:
 #              cpu: 1
@@ -84,10 +93,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: wallet
+  namespace: wallet
 spec:
   selector:
     app: wallet
-  type: LoadBalancer
   ports:
     - port: 8080
       protocol: TCP
@@ -102,5 +111,21 @@ spec:
       targetPort: management
       name: management
 ---
-
-
+apiVersion: x.getambassador.io/v3alpha1
+kind: AmbassadorMapping
+metadata:
+  name: wallet-mapping
+  namespace: wallet
+spec:
+  hostname: wallet.incubator.10pines.com
+  prefix: /
+  service: wallet:8080
+---
+apiVersion: networking.gke.io/v1beta1
+kind: ManagedCertificate
+metadata:
+  name: wallet-cert
+  namespace: ambassador
+spec:
+  domains:
+    - wallet.incubator.10pines.com

@@ -27,8 +27,9 @@ libraryDependencies ++= Seq(
 enablePlugins(JavaAppPackaging, DockerPlugin, AshScriptPlugin)
 
 maintainer in Docker := "Erwin Debusschere <erwincdl@gmail.com>"
-packageName in Docker := "wallet"
+packageName in Docker := "scala-akka-sharding"
 version in Docker := "latest"
+dockerUsername in Docker := Some("erwincdl")
 
 dockerBaseImage := "adoptopenjdk/openjdk13:alpine-jre"
 
